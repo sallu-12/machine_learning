@@ -435,13 +435,10 @@ export default function DatasetsPage() {
 
         {/* Experiment History */}
         <section className="scroll-reveal" data-reveal>
-          <div className="mb-3 sm:mb-4 flex items-center justify-between">
+          <div className="mb-3 sm:mb-4">
             <h3 className="text-base sm:text-lg font-semibold text-foreground">
               Recent Experiments
             </h3>
-            <Button variant="ghost" size="sm" className="text-primary">
-              View All
-            </Button>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:gap-4 md:gap-6 lg:grid-cols-3">
