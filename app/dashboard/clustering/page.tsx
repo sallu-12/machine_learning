@@ -1,12 +1,21 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import dynamic from "next/dynamic";
 import { TopBar } from "@/components/top-bar";
 import { ControlPanel } from "@/components/control-panel";
 import { ExplanationPanel } from "@/components/explanation-panel";
 import { StatsCard } from "@/components/stats-card";
-import { ClusteringChart } from "@/components/visualizations/clustering-chart";
-import { DecisionTreeChart } from "@/components/visualizations/decision-tree-chart";
+
+// Lazy load charts for better performance
+const ClusteringChart = dynamic(
+  () => import("@/components/visualizations/clustering-chart").then(mod => ({ default: mod.ClusteringChart })),
+  { ssr: false, loading: () => <div className="h-96 bg-card rounded-xl animate-pulse" /> }
+);
+const DecisionTreeChart = dynamic(
+  () => import("@/components/visualizations/decision-tree-chart").then(mod => ({ default: mod.DecisionTreeChart })),
+  { ssr: false, loading: () => <div className="h-80 bg-card rounded-xl animate-pulse" /> }
+);
 import {
   generateClusterData,
   generateClassificationData,
@@ -20,8 +29,14 @@ import {
 } from "@/lib/ml-algorithms";
 import { Layers, Hash, CheckCircle, GitBranch, TreeDeciduous } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useScrollReveal } from "@/hooks/use-scroll-reveal";
 
 export default function ClusteringPage() {
+  useScrollReveal();
+
+  // Track active tab
+  const [activeTab, setActiveTab] = useState("kmeans");
+
   // K-Means State
   const [points, setPoints] = useState<Point[]>([]);
   const [clusterState, setClusterState] = useState<ClusteringState>({
@@ -42,8 +57,10 @@ export default function ClusteringPage() {
   const [treeIteration, setTreeIteration] = useState(0);
 
   const [dataset, setDataset] = useState("default");
-  const kmeansIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const treeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const kmeansFrameRef = useRef<number | null>(null);
+  const treeFrameRef = useRef<number | null>(null);
+  const kmeansLastStepRef = useRef<number>(0);
+  const treeLastStepRef = useRef<number>(0);
 
   // Initialize K-Means data
   useEffect(() => {
@@ -94,22 +111,44 @@ export default function ClusteringPage() {
     setClusterState((prev) => kMeansStep(points, prev, kValue));
   }, [points, kValue, clusterState.converged]);
 
+  // Pause animations when switching tabs (performance optimization)
+  useEffect(() => {
+    if (activeTab !== "kmeans" && isPlayingKMeans) {
+      setIsPlayingKMeans(false);
+    }
+  }, [activeTab, isPlayingKMeans]);
+
+  useEffect(() => {
+    if (activeTab !== "tree" && isPlayingTree) {
+      setIsPlayingTree(false);
+    }
+  }, [activeTab, isPlayingTree]);
+
   // K-Means animation loop
   useEffect(() => {
-    if (isPlayingKMeans && !clusterState.converged) {
-      kmeansIntervalRef.current = setInterval(stepKMeans, 800);
+    if (isPlayingKMeans && !clusterState.converged && activeTab === "kmeans") {
+      kmeansLastStepRef.current = Date.now();
+      const animate = () => {
+        const now = Date.now();
+        if (now - kmeansLastStepRef.current >= 800) {
+          stepKMeans();
+          kmeansLastStepRef.current = now;
+        }
+        kmeansFrameRef.current = requestAnimationFrame(animate);
+      };
+      kmeansFrameRef.current = requestAnimationFrame(animate);
     } else {
-      if (kmeansIntervalRef.current) {
-        clearInterval(kmeansIntervalRef.current);
-        kmeansIntervalRef.current = null;
+      if (kmeansFrameRef.current) {
+        cancelAnimationFrame(kmeansFrameRef.current);
+        kmeansFrameRef.current = null;
       }
     }
     return () => {
-      if (kmeansIntervalRef.current) {
-        clearInterval(kmeansIntervalRef.current);
+      if (kmeansFrameRef.current) {
+        cancelAnimationFrame(kmeansFrameRef.current);
       }
     };
-  }, [isPlayingKMeans, stepKMeans, clusterState.converged]);
+  }, [isPlayingKMeans, stepKMeans, clusterState.converged, activeTab]);
 
   // Reset K-Means when k changes
   useEffect(() => {
@@ -117,57 +156,54 @@ export default function ClusteringPage() {
   }, [kValue]);
 
   // Decision Tree functions
-  const resetTree = () => {
+  const resetTree = useCallback(() => {
+    if (treeFrameRef.current) {
+      cancelAnimationFrame(treeFrameRef.current);
+      treeFrameRef.current = null;
+    }
     setTreeRoot(null);
     setTreeIteration(0);
     setIsPlayingTree(false);
-  };
+  }, []);
 
-  const buildTree = useCallback(() => {
-    if (treeData.length === 0) return;
-
-    const features = ["age", "income"];
-    let currentDepth = 0;
-
-    const animateBuild = () => {
-      if (currentDepth <= maxDepth) {
-        const tree = buildTreeStep(treeData, features, 0, currentDepth);
-        setTreeRoot(tree);
-        setTreeIteration(currentDepth);
-        currentDepth++;
-        treeTimeoutRef.current = setTimeout(animateBuild, 1000);
-      } else {
-        setIsPlayingTree(false);
-      }
-    };
-
-    animateBuild();
+  const stepTree = useCallback(() => {
+    setTreeIteration((prev) => {
+      if (prev >= maxDepth) return prev;
+      const nextDepth = prev + 1;
+      const features = ["age", "income"];
+      const tree = buildTreeStep(treeData, features, 0, nextDepth);
+      setTreeRoot(tree);
+      return nextDepth;
+    });
   }, [treeData, maxDepth]);
 
-  const stepTree = () => {
-    if (treeIteration > maxDepth) return;
-    const features = ["age", "income"];
-    const tree = buildTreeStep(treeData, features, 0, treeIteration + 1);
-    setTreeRoot(tree);
-    setTreeIteration((prev) => prev + 1);
-  };
+  // Stop playing when tree is fully built
+  useEffect(() => {
+    if (treeIteration >= maxDepth && isPlayingTree) {
+      setIsPlayingTree(false);
+    }
+  }, [treeIteration, maxDepth, isPlayingTree]);
 
   // Tree animation
   useEffect(() => {
-    if (isPlayingTree) {
-      buildTree();
-    } else {
-      if (treeTimeoutRef.current) {
-        clearTimeout(treeTimeoutRef.current);
-        treeTimeoutRef.current = null;
-      }
+    if (isPlayingTree && activeTab === "tree" && treeIteration < maxDepth) {
+      treeLastStepRef.current = Date.now();
+      const animate = () => {
+        const now = Date.now();
+        if (now - treeLastStepRef.current >= 1000) {
+          stepTree();
+          treeLastStepRef.current = now;
+        }
+        treeFrameRef.current = requestAnimationFrame(animate);
+      };
+      treeFrameRef.current = requestAnimationFrame(animate);
     }
     return () => {
-      if (treeTimeoutRef.current) {
-        clearTimeout(treeTimeoutRef.current);
+      if (treeFrameRef.current) {
+        cancelAnimationFrame(treeFrameRef.current);
       }
     };
-  }, [isPlayingTree, buildTree]);
+  }, [isPlayingTree, stepTree, treeIteration, maxDepth, activeTab]);
 
   // K-Means explanation
   const getKMeansExplanation = () => {
@@ -248,23 +284,23 @@ export default function ClusteringPage() {
         onDatasetChange={setDataset}
       />
 
-      <div className="p-6 space-y-8">
-        <Tabs defaultValue="kmeans" className="w-full">
-          <TabsList className="mb-6 bg-secondary">
-            <TabsTrigger value="kmeans" className="gap-2">
-              <Layers className="h-4 w-4" />
+      <div className="p-2 sm:p-3 md:p-6 space-y-2 sm:space-y-3 md:space-y-6">
+        <Tabs defaultValue="kmeans" value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="mb-2 sm:mb-3 md:mb-6 bg-secondary grid grid-cols-2 w-full sm:w-auto">
+            <TabsTrigger value="kmeans" className="gap-2 text-xs sm:text-sm">
+              <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               K-Means Clustering
             </TabsTrigger>
-            <TabsTrigger value="tree" className="gap-2">
-              <TreeDeciduous className="h-4 w-4" />
+            <TabsTrigger value="tree" className="gap-2 text-xs sm:text-sm">
+              <TreeDeciduous className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               Decision Tree
             </TabsTrigger>
           </TabsList>
 
           {/* K-Means Tab */}
-          <TabsContent value="kmeans" className="space-y-6">
+          <TabsContent value="kmeans" className="space-y-2 sm:space-y-3 md:space-y-6">
             {/* Stats */}
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-1.5 sm:gap-2 md:gap-4 lg:grid-cols-4 scroll-reveal" data-reveal>
               <StatsCard
                 label="Iteration"
                 value={clusterState.iteration}
@@ -292,21 +328,23 @@ export default function ClusteringPage() {
             </div>
 
             {/* Main Content */}
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-              <div className="xl:col-span-2">
-                <ClusteringChart
-                  points={points}
-                  state={clusterState}
-                  width={600}
-                  height={450}
-                />
+            <div className="grid grid-cols-1 gap-2 sm:gap-3 md:gap-6 xl:grid-cols-3 scroll-reveal" data-reveal>
+              <div className="xl:col-span-2 space-y-2 sm:space-y-3 md:space-y-6 w-full overflow-x-hidden">
+                <div className="w-full max-w-full overflow-hidden">
+                  <ClusteringChart
+                    points={points}
+                    state={clusterState}
+                    width={600}
+                    height={350}
+                  />
+                </div>
 
                 {/* Cluster breakdown */}
-                <div className="mt-4 grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-1 sm:gap-2 md:gap-4">
                   {clusterCounts.map((count, idx) => (
                     <div
                       key={idx}
-                      className="rounded-lg border border-border bg-card p-3 text-center"
+                      className="rounded-lg border border-border bg-card p-2 sm:p-3 text-center"
                     >
                       <div
                         className="mx-auto mb-2 h-3 w-3 rounded-full"
@@ -330,7 +368,7 @@ export default function ClusteringPage() {
                 </div>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-2 sm:space-y-3 md:space-y-6">
                 <ControlPanel
                   isPlaying={isPlayingKMeans}
                   onPlay={() => setIsPlayingKMeans(true)}
@@ -361,26 +399,26 @@ export default function ClusteringPage() {
             </div>
 
             {/* Algorithm explanation */}
-            <div className="rounded-xl border border-border bg-card p-6">
-              <h3 className="mb-4 text-lg font-semibold text-foreground">
+            <div className="rounded-xl border border-border bg-card p-3 sm:p-4 md:p-5 scroll-reveal" data-reveal>
+              <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-foreground">
                 How K-Means Clustering Works
               </h3>
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4 md:gap-6 md:grid-cols-3">
                 <div>
-                  <h4 className="mb-2 font-medium text-chart-1">1. Initialize</h4>
-                  <p className="text-sm text-muted-foreground">
+                  <h4 className="mb-1 sm:mb-2 text-xs sm:text-sm font-medium text-chart-1">1. Initialize</h4>
+                  <p className="text-[11px] sm:text-xs text-muted-foreground">
                     Place k centroids using K-Means++ for better starting positions.
                   </p>
                 </div>
                 <div>
-                  <h4 className="mb-2 font-medium text-chart-2">2. Assign</h4>
-                  <p className="text-sm text-muted-foreground">
+                  <h4 className="mb-1 sm:mb-2 text-xs sm:text-sm font-medium text-chart-2">2. Assign</h4>
+                  <p className="text-[11px] sm:text-xs text-muted-foreground">
                     Assign each point to its nearest centroid based on Euclidean distance.
                   </p>
                 </div>
                 <div>
-                  <h4 className="mb-2 font-medium text-chart-3">3. Update</h4>
-                  <p className="text-sm text-muted-foreground">
+                  <h4 className="mb-1 sm:mb-2 text-xs sm:text-sm font-medium text-chart-3">3. Update</h4>
+                  <p className="text-[11px] sm:text-xs text-muted-foreground">
                     Move each centroid to the mean position of its assigned points.
                   </p>
                 </div>
@@ -389,9 +427,9 @@ export default function ClusteringPage() {
           </TabsContent>
 
           {/* Decision Tree Tab */}
-          <TabsContent value="tree" className="space-y-6" id="decision-tree">
+          <TabsContent value="tree" className="space-y-2 sm:space-y-3 md:space-y-6" id="decision-tree">
             {/* Stats */}
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 md:gap-4 lg:grid-cols-4 scroll-reveal" data-reveal>
               <StatsCard
                 label="Current Depth"
                 value={treeIteration}
@@ -421,25 +459,31 @@ export default function ClusteringPage() {
             </div>
 
             {/* Main Content */}
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-              <div className="xl:col-span-2">
-                <DecisionTreeChart root={treeRoot} width={650} height={400} />
+            <div className="grid grid-cols-1 gap-3 sm:gap-4 md:gap-6 xl:grid-cols-3 scroll-reveal" data-reveal>
+              <div className="xl:col-span-2 space-y-2 sm:space-y-3 md:space-y-6">
+                <div className="w-full max-w-full overflow-hidden">
+                  <DecisionTreeChart root={treeRoot} width={650} height={300} />
+                </div>
 
                 {/* Feature importance */}
-                <div className="mt-4 rounded-xl border border-border bg-card p-4">
-                  <h4 className="mb-3 text-sm font-medium text-foreground">
+                <div className="rounded-xl border border-border bg-card p-3 sm:p-4">
+                  <h4 className="mb-2 sm:mb-3 text-sm font-medium text-foreground">
                     Classification Task
                   </h4>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     Predicting risk level based on <strong>Age</strong> and{" "}
-                    <strong>Income</strong>. High-income older individuals or
-                    very high-income younger individuals are classified as
-                    {"High Risk"}.
+                    <strong>Income</strong>. The model outputs
+                    {" Low Risk"}, {" Medium Risk"}, or {" High Risk"}
+                    based on these thresholds.
+                  </p>
+                  <p className="mt-2 text-[11px] sm:text-xs text-muted-foreground">
+                    Labels: <strong>H</strong> = High Risk, <strong>M</strong> = Medium Risk,
+                    <strong> L</strong> = Low Risk.
                   </p>
                 </div>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-2 sm:space-y-3 md:space-y-6">
                 <ControlPanel
                   isPlaying={isPlayingTree}
                   onPlay={() => setIsPlayingTree(true)}
@@ -473,28 +517,28 @@ export default function ClusteringPage() {
             </div>
 
             {/* Algorithm explanation */}
-            <div className="rounded-xl border border-border bg-card p-6">
-              <h3 className="mb-4 text-lg font-semibold text-foreground">
+            <div className="rounded-xl border border-border bg-card p-3 sm:p-4 md:p-5 scroll-reveal" data-reveal>
+              <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-foreground">
                 How Decision Trees Work
               </h3>
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4 md:gap-6 md:grid-cols-3">
                 <div>
-                  <h4 className="mb-2 font-medium text-chart-1">1. Find Best Split</h4>
-                  <p className="text-sm text-muted-foreground">
+                  <h4 className="mb-1 sm:mb-2 text-xs sm:text-sm font-medium text-chart-1">1. Find Best Split</h4>
+                  <p className="text-[11px] sm:text-xs text-muted-foreground">
                     For each feature, find the threshold that best separates classes
                     using Gini impurity.
                   </p>
                 </div>
                 <div>
-                  <h4 className="mb-2 font-medium text-chart-2">2. Split Data</h4>
-                  <p className="text-sm text-muted-foreground">
+                  <h4 className="mb-1 sm:mb-2 text-xs sm:text-sm font-medium text-chart-2">2. Split Data</h4>
+                  <p className="text-[11px] sm:text-xs text-muted-foreground">
                     Divide data into left (less than threshold) and right (greater
                     than) branches.
                   </p>
                 </div>
                 <div>
-                  <h4 className="mb-2 font-medium text-chart-3">3. Recurse or Stop</h4>
-                  <p className="text-sm text-muted-foreground">
+                  <h4 className="mb-1 sm:mb-2 text-xs sm:text-sm font-medium text-chart-3">3. Recurse or Stop</h4>
+                  <p className="text-[11px] sm:text-xs text-muted-foreground">
                     Repeat for each branch until max depth or pure nodes (single
                     class) are reached.
                   </p>

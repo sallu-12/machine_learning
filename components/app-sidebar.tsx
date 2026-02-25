@@ -3,48 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import {
-  LayoutDashboard,
-  TrendingUp,
-  Layers,
-  Database,
-  LogOut,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
+import { LogOut, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-
-const navItems = [
-  {
-    title: "Explorer",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-    description: "Algorithm overview",
-    color: "text-primary",
-  },
-  {
-    title: "Linear Regression",
-    href: "/dashboard/regression",
-    icon: TrendingUp,
-    description: "Gradient descent",
-    color: "text-chart-1",
-  },
-  {
-    title: "Clustering & Trees",
-    href: "/dashboard/clustering",
-    icon: Layers,
-    description: "K-Means & Decision Tree",
-    color: "text-chart-2",
-  },
-  {
-    title: "Datasets",
-    href: "/dashboard/datasets",
-    icon: Database,
-    description: "Data & insights",
-    color: "text-chart-3",
-  },
-];
+import { clearAuthToken } from "@/lib/auth-client";
+import { navItems } from "@/components/navigation";
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -53,8 +16,8 @@ export function AppSidebar() {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border bg-sidebar transition-all duration-300",
-        collapsed ? "w-16" : "w-64"
+        "fixed left-0 top-0 z-40 hidden h-screen flex-col border-r border-border bg-sidebar transition-all duration-300 md:flex",
+        collapsed ? "w-14 sm:w-16" : "w-56 sm:w-64"
       )}
     >
       {/* Logo */}
@@ -121,16 +84,19 @@ export function AppSidebar() {
 
       {/* Footer */}
       <div className="border-t border-border p-2">
-        <Link
-          href="/"
+        <button
+          onClick={() => {
+            clearAuthToken();
+            window.location.href = "/";
+          }}
           className={cn(
-            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
+            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
             collapsed && "justify-center px-2"
           )}
         >
           <LogOut className="h-5 w-5 shrink-0" />
           {!collapsed && <span className="text-sm">Sign Out</span>}
-        </Link>
+        </button>
       </div>
     </aside>
   );

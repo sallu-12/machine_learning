@@ -3,7 +3,7 @@
 import React from "react"
 
 import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 interface StatsCardProps {
   label: string;
@@ -27,6 +27,8 @@ export function StatsCard({
   color = "default",
 }: StatsCardProps) {
   const [displayValue, setDisplayValue] = useState(typeof value === "number" ? 0 : value);
+  const frameRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (typeof value !== "number" || !animate) {
@@ -34,26 +36,37 @@ export function StatsCard({
       return;
     }
 
-    const duration = 500;
-    const steps = 30;
-    const stepDuration = duration / steps;
+    const duration = 400; // Slightly faster
     const startValue = typeof displayValue === "number" ? displayValue : 0;
     const diff = value - startValue;
 
-    let step = 0;
-    const interval = setInterval(() => {
-      step++;
-      const progress = step / steps;
-      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
-      setDisplayValue(startValue + diff * eased);
+    const animateFrame = (currentTime: number) => {
+      if (!startTimeRef.current) {
+        startTimeRef.current = currentTime;
+      }
 
-      if (step >= steps) {
-        clearInterval(interval);
+      const elapsed = currentTime - startTimeRef.current;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Ease-out cubic for smooth animation
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayValue(Math.round(startValue + diff * eased));
+
+      if (progress < 1) {
+        frameRef.current = requestAnimationFrame(animateFrame);
+      } else {
         setDisplayValue(value);
       }
-    }, stepDuration);
+    };
 
-    return () => clearInterval(interval);
+    frameRef.current = requestAnimationFrame(animateFrame);
+
+    return () => {
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+      }
+      startTimeRef.current = null;
+    };
   }, [value, animate]);
 
   const colorClasses = {
@@ -75,33 +88,33 @@ export function StatsCard({
   return (
     <div
       className={cn(
-        "rounded-xl border p-4 transition-all duration-200 hover:shadow-lg",
+        "rounded-xl border p-3 sm:p-4 transition-all duration-200 hover:shadow-lg",
         colorClasses[color],
         className
       )}
     >
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-muted-foreground">
             {label}
           </p>
-          <div className="mt-1 flex items-baseline gap-1">
+          <div className="mt-1.5 sm:mt-2 flex items-baseline gap-1">
             <span
-              className={cn("text-2xl font-bold font-mono", textColors[color])}
+              className={cn("text-lg sm:text-2xl font-bold font-mono", textColors[color])}
             >
               {typeof displayValue === "number"
                 ? displayValue.toFixed(displayValue < 1 ? 4 : 2)
                 : displayValue}
             </span>
             {unit && (
-              <span className="text-sm text-muted-foreground">{unit}</span>
+              <span className="text-xs sm:text-sm text-muted-foreground">{unit}</span>
             )}
           </div>
         </div>
         {icon && (
           <div
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-lg bg-secondary",
+              "flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-secondary",
               textColors[color]
             )}
           >

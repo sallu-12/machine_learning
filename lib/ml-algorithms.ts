@@ -42,6 +42,28 @@ export interface DecisionTreeState {
   buildHistory: TreeNode[][];
 }
 
+export interface PCAResult {
+  mean: Point;
+  direction: Point;
+  varianceRatio: number;
+  projected: Point[];
+}
+
+export interface DBSCANResult {
+  assignments: number[];
+  clusters: number;
+  noiseCount: number;
+}
+
+export interface GMMState {
+  means: Point[];
+  variances: Point[];
+  weights: number[];
+  assignments: number[];
+  logLikelihood: number;
+  iteration: number;
+}
+
 // Linear Regression with Gradient Descent
 export function initializeRegression(): RegressionState {
   return {
@@ -398,10 +420,12 @@ export function generateClassificationData(n: number): TreeDataPoint[] {
     const age = 20 + Math.random() * 50;
     const income = 20000 + Math.random() * 80000;
     
-    // Simple decision boundary
-    const label = (age > 35 && income > 50000) || (age <= 35 && income > 70000)
+    // Simple 3-class boundary for Low/Medium/High risk
+    const label = (age > 45 && income > 65000) || (age <= 30 && income > 80000)
       ? 'High Risk'
-      : 'Low Risk';
+      : (age > 35 && income > 45000) || (age > 25 && income > 60000)
+        ? 'Medium Risk'
+        : 'Low Risk';
     
     data.push({
       features: { age, income },
@@ -412,11 +436,320 @@ export function generateClassificationData(n: number): TreeDataPoint[] {
   return data;
 }
 
+function randomNormal(mean = 0, stdDev = 1): number {
+  let u = 0;
+  let v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  const num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  return num * stdDev + mean;
+}
+
+// PCA
+export function generatePCAData(n: number, angleDeg = 25, noise = 8): Point[] {
+  const points: Point[] = [];
+  const angle = (angleDeg * Math.PI) / 180;
+  const dirX = Math.cos(angle);
+  const dirY = Math.sin(angle);
+  const orthoX = -dirY;
+  const orthoY = dirX;
+
+  for (let i = 0; i < n; i++) {
+    const t = randomNormal(0, 30);
+    const n1 = randomNormal(0, noise);
+    const x = 50 + dirX * t + orthoX * n1;
+    const y = 50 + dirY * t + orthoY * n1;
+    points.push({ x, y });
+  }
+
+  return points;
+}
+
+export function computePCA(points: Point[]): PCAResult {
+  if (points.length === 0) {
+    return {
+      mean: { x: 0, y: 0 },
+      direction: { x: 1, y: 0 },
+      varianceRatio: 0,
+      projected: [],
+    };
+  }
+
+  const mean = points.reduce(
+    (acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }),
+    { x: 0, y: 0 }
+  );
+  mean.x /= points.length;
+  mean.y /= points.length;
+
+  let covXX = 0;
+  let covYY = 0;
+  let covXY = 0;
+  points.forEach((p) => {
+    const dx = p.x - mean.x;
+    const dy = p.y - mean.y;
+    covXX += dx * dx;
+    covYY += dy * dy;
+    covXY += dx * dy;
+  });
+  covXX /= points.length;
+  covYY /= points.length;
+  covXY /= points.length;
+
+  const trace = covXX + covYY;
+  const det = covXX * covYY - covXY * covXY;
+  const temp = Math.sqrt(Math.max(0, (trace * trace) / 4 - det));
+  const lambda1 = trace / 2 + temp;
+  const lambda2 = trace / 2 - temp;
+
+  let dir = { x: 1, y: 0 };
+  if (Math.abs(covXY) > 1e-6) {
+    dir = { x: lambda1 - covYY, y: covXY };
+  } else if (covXX < covYY) {
+    dir = { x: 0, y: 1 };
+  }
+
+  const norm = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
+  dir = { x: dir.x / norm, y: dir.y / norm };
+
+  const varianceRatio = trace > 0 ? lambda1 / trace : 0;
+
+  const projected = points.map((p) => {
+    const dx = p.x - mean.x;
+    const dy = p.y - mean.y;
+    const scalar = dx * dir.x + dy * dir.y;
+    return { x: mean.x + dir.x * scalar, y: mean.y + dir.y * scalar };
+  });
+
+  return {
+    mean,
+    direction: dir,
+    varianceRatio,
+    projected,
+  };
+}
+
+// DBSCAN
+export function generateDBSCANData(n: number, clusters = 3, noisePoints = 12): Point[] {
+  const points: Point[] = [];
+  const centers = [
+    { x: 25, y: 30 },
+    { x: 75, y: 30 },
+    { x: 50, y: 70 },
+    { x: 25, y: 70 },
+  ].slice(0, clusters);
+
+  for (let i = 0; i < n; i++) {
+    const center = centers[i % centers.length];
+    points.push({
+      x: center.x + randomNormal(0, 8),
+      y: center.y + randomNormal(0, 8),
+    });
+  }
+
+  for (let i = 0; i < noisePoints; i++) {
+    points.push({
+      x: 10 + Math.random() * 80,
+      y: 10 + Math.random() * 80,
+    });
+  }
+
+  return points;
+}
+
+export function dbscanCluster(points: Point[], eps: number, minPts: number): DBSCANResult {
+  const assignments = Array(points.length).fill(-1);
+  const visited = Array(points.length).fill(false);
+  let clusterId = 0;
+
+  const distance = (a: Point, b: Point) =>
+    Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
+
+  const regionQuery = (index: number) => {
+    const neighbors: number[] = [];
+    points.forEach((p, idx) => {
+      if (distance(points[index], p) <= eps) neighbors.push(idx);
+    });
+    return neighbors;
+  };
+
+  const expandCluster = (index: number, neighbors: number[]) => {
+    assignments[index] = clusterId;
+
+    for (let i = 0; i < neighbors.length; i++) {
+      const neighborIdx = neighbors[i];
+
+      if (!visited[neighborIdx]) {
+        visited[neighborIdx] = true;
+        const neighborNeighbors = regionQuery(neighborIdx);
+        if (neighborNeighbors.length >= minPts) {
+          neighbors.push(...neighborNeighbors.filter((n) => !neighbors.includes(n)));
+        }
+      }
+
+      if (assignments[neighborIdx] === -1) {
+        assignments[neighborIdx] = clusterId;
+      }
+    }
+  };
+
+  for (let i = 0; i < points.length; i++) {
+    if (visited[i]) continue;
+    visited[i] = true;
+    const neighbors = regionQuery(i);
+
+    if (neighbors.length < minPts) {
+      assignments[i] = -1;
+    } else {
+      expandCluster(i, neighbors);
+      clusterId++;
+    }
+  }
+
+  const noiseCount = assignments.filter((a) => a === -1).length;
+
+  return {
+    assignments,
+    clusters: clusterId,
+    noiseCount,
+  };
+}
+
+// GMM (EM)
+export function generateGMMData(n: number, components = 3): Point[] {
+  const points: Point[] = [];
+  const centers = [
+    { x: 25, y: 30 },
+    { x: 70, y: 35 },
+    { x: 50, y: 75 },
+    { x: 30, y: 70 },
+  ].slice(0, components);
+
+  for (let i = 0; i < n; i++) {
+    const center = centers[i % centers.length];
+    points.push({
+      x: center.x + randomNormal(0, 10),
+      y: center.y + randomNormal(0, 10),
+    });
+  }
+
+  return points;
+}
+
+export function initializeGMM(points: Point[], k: number): GMMState {
+  const means: Point[] = [];
+  const variances: Point[] = [];
+  const weights = Array(k).fill(1 / k);
+
+  for (let i = 0; i < k; i++) {
+    const p = points[Math.floor(Math.random() * points.length)] || { x: 50, y: 50 };
+    means.push({ x: p.x, y: p.y });
+    variances.push({ x: 120, y: 120 });
+  }
+
+  return {
+    means,
+    variances,
+    weights,
+    assignments: Array(points.length).fill(0),
+    logLikelihood: 0,
+    iteration: 0,
+  };
+}
+
+export function gmmStep(points: Point[], state: GMMState): GMMState {
+  const k = state.means.length;
+  const responsibilities: number[][] = Array(points.length)
+    .fill(0)
+    .map(() => Array(k).fill(0));
+
+  const gaussian = (point: Point, mean: Point, variance: Point) => {
+    const varX = Math.max(variance.x, 10);
+    const varY = Math.max(variance.y, 10);
+    const dx = point.x - mean.x;
+    const dy = point.y - mean.y;
+    const coef = 1 / (2 * Math.PI * Math.sqrt(varX * varY));
+    const expTerm = Math.exp(-(dx * dx) / (2 * varX) - (dy * dy) / (2 * varY));
+    return coef * expTerm;
+  };
+
+  let logLikelihood = 0;
+  const assignments = Array(points.length).fill(0);
+
+  points.forEach((point, i) => {
+    let total = 0;
+    for (let c = 0; c < k; c++) {
+      const prob = state.weights[c] * gaussian(point, state.means[c], state.variances[c]);
+      responsibilities[i][c] = prob;
+      total += prob;
+    }
+
+    if (total === 0) total = 1e-12;
+    logLikelihood += Math.log(total);
+
+    let maxIdx = 0;
+    let maxVal = 0;
+    for (let c = 0; c < k; c++) {
+      responsibilities[i][c] /= total;
+      if (responsibilities[i][c] > maxVal) {
+        maxVal = responsibilities[i][c];
+        maxIdx = c;
+      }
+    }
+    assignments[i] = maxIdx;
+  });
+
+  const newMeans: Point[] = Array(k).fill(0).map(() => ({ x: 0, y: 0 }));
+  const newVariances: Point[] = Array(k).fill(0).map(() => ({ x: 0, y: 0 }));
+  const newWeights = Array(k).fill(0);
+
+  for (let c = 0; c < k; c++) {
+    let weightSum = 0;
+    points.forEach((p, i) => {
+      const r = responsibilities[i][c];
+      weightSum += r;
+      newMeans[c].x += r * p.x;
+      newMeans[c].y += r * p.y;
+    });
+
+    if (weightSum === 0) {
+      newMeans[c] = { ...state.means[c] };
+      newVariances[c] = { ...state.variances[c] };
+      newWeights[c] = state.weights[c];
+      continue;
+    }
+
+    newMeans[c].x /= weightSum;
+    newMeans[c].y /= weightSum;
+    newWeights[c] = weightSum / points.length;
+
+    points.forEach((p, i) => {
+      const r = responsibilities[i][c];
+      const dx = p.x - newMeans[c].x;
+      const dy = p.y - newMeans[c].y;
+      newVariances[c].x += r * dx * dx;
+      newVariances[c].y += r * dy * dy;
+    });
+
+    newVariances[c].x = newVariances[c].x / weightSum + 10;
+    newVariances[c].y = newVariances[c].y / weightSum + 10;
+  }
+
+  return {
+    means: newMeans,
+    variances: newVariances,
+    weights: newWeights,
+    assignments,
+    logLikelihood,
+    iteration: state.iteration + 1,
+  };
+}
+
 // Cluster colors
 export const CLUSTER_COLORS = [
-  'oklch(0.65 0.2 265)',   // Primary blue
-  'oklch(0.55 0.18 170)',  // Teal/Cyan
-  'oklch(0.7 0.18 80)',    // Yellow/Gold
-  'oklch(0.6 0.2 320)',    // Pink
-  'oklch(0.65 0.22 30)',   // Orange
+  'oklch(0.74 0.2 210)',   // Bright blue
+  'oklch(0.7 0.2 165)',    // Teal
+  'oklch(0.82 0.22 80)',   // Gold
+  'oklch(0.72 0.2 20)',    // Orange
+  'oklch(0.66 0.2 310)',   // Magenta
 ];

@@ -6,6 +6,7 @@ import { StatsCard } from "@/components/stats-card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Database, Download, RefreshCw, BarChartBig as ChartBar, Clock, TrendingUp, Layers, GitBranch, Eye, Check } from "lucide-react";
+import { useScrollReveal } from "@/hooks/use-scroll-reveal";
 import {
   generateLinearData,
   generateClusterData,
@@ -98,6 +99,8 @@ const datasets: DatasetConfig[] = [
 ];
 
 export default function DatasetsPage() {
+  useScrollReveal();
+
   const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<Point[] | TreeDataPoint[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -205,9 +208,9 @@ export default function DatasetsPage() {
         subtitle="Manage datasets and view experiment history"
       />
 
-      <div className="p-6 space-y-8">
+      <div className="p-2 sm:p-3 md:p-6 space-y-4 sm:space-y-6 md:space-y-8">
         {/* Stats Overview */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 md:gap-4 lg:grid-cols-4 scroll-reveal" data-reveal>
           <StatsCard
             label="Available Datasets"
             value={datasets.length}
@@ -235,9 +238,9 @@ export default function DatasetsPage() {
         </div>
 
         {/* Dataset Grid */}
-        <section>
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-foreground">
+        <section className="scroll-reveal" data-reveal>
+          <div className="mb-3 sm:mb-4 flex items-center justify-between">
+            <h3 className="text-base sm:text-lg font-semibold text-foreground">
               Available Datasets
             </h3>
             <Button variant="outline" size="sm" className="gap-2 bg-transparent">
@@ -246,7 +249,7 @@ export default function DatasetsPage() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:gap-4 md:gap-6 md:grid-cols-2 lg:grid-cols-3">
             {datasets.map((dataset) => {
               const colors = getColorClasses(dataset.color);
               const isSelected = selectedDataset === dataset.id;
@@ -256,7 +259,7 @@ export default function DatasetsPage() {
                   key={dataset.id}
                   onClick={() => handleDatasetSelect(dataset.id)}
                   className={cn(
-                    "group relative cursor-pointer rounded-xl border p-5 transition-all duration-200",
+                    "fancy-card group relative cursor-pointer rounded-xl border p-5 transition-all duration-200",
                     isSelected
                       ? `${colors.border} ${colors.bg}`
                       : "border-border bg-card hover:border-primary/30"
@@ -316,7 +319,7 @@ export default function DatasetsPage() {
 
         {/* Data Preview */}
         {selectedDataset && (
-          <section className="rounded-xl border border-border bg-card p-6">
+          <section className="rounded-xl border border-border bg-card p-3 sm:p-4 md:p-5 scroll-reveal" data-reveal>
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Eye className="h-5 w-5 text-primary" />
@@ -421,9 +424,9 @@ export default function DatasetsPage() {
         )}
 
         {/* Experiment History */}
-        <section>
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-foreground">
+        <section className="scroll-reveal" data-reveal>
+          <div className="mb-3 sm:mb-4 flex items-center justify-between">
+            <h3 className="text-base sm:text-lg font-semibold text-foreground">
               Recent Experiments
             </h3>
             <Button variant="ghost" size="sm" className="text-primary">
@@ -431,7 +434,7 @@ export default function DatasetsPage() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:gap-4 md:gap-6 lg:grid-cols-3">
             {experimentHistory.map((experiment) => (
               <div
                 key={experiment.id}
@@ -486,11 +489,11 @@ export default function DatasetsPage() {
         </section>
 
         {/* Learning Tips */}
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-6">
-          <h3 className="mb-4 text-lg font-semibold text-foreground">
+        <section className="rounded-xl border border-primary/20 bg-primary/5 p-3 sm:p-4 md:p-5 scroll-reveal" data-reveal>
+          <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-foreground">
             Learning Tips
           </h3>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:gap-4 md:gap-6 md:grid-cols-2 lg:grid-cols-3">
             <div className="flex gap-3">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
                 1

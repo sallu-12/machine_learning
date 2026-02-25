@@ -15,8 +15,11 @@ import {
   type RegressionState,
 } from "@/lib/ml-algorithms";
 import { TrendingDown, Hash, Percent, Target } from "lucide-react";
+import { useScrollReveal } from "@/hooks/use-scroll-reveal";
 
 export default function RegressionPage() {
+  useScrollReveal();
+
   const [points, setPoints] = useState<Point[]>([]);
   const [state, setState] = useState<RegressionState>(initializeRegression());
   const [isPlaying, setIsPlaying] = useState(false);
@@ -81,22 +84,30 @@ export default function RegressionPage() {
     setIsPlaying(false);
   };
 
-  // Animation loop
+  // Optimized animation loop using requestAnimationFrame
   useEffect(() => {
-    if (isPlaying) {
-      intervalRef.current = setInterval(() => {
-        step();
-      }, 100);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+    if (!isPlaying) {
+      return;
     }
 
+    let lastStepTime = Date.now();
+    const stepDelay = 100; // ms between steps
+    let frameId: number | null = null;
+
+    const animate = () => {
+      const now = Date.now();
+      if (now - lastStepTime >= stepDelay) {
+        step();
+        lastStepTime = now;
+      }
+      frameId = requestAnimationFrame(animate);
+    };
+
+    frameId = requestAnimationFrame(animate);
+
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+      if (frameId) {
+        cancelAnimationFrame(frameId);
       }
     };
   }, [isPlaying, step]);
@@ -164,9 +175,9 @@ export default function RegressionPage() {
         onDatasetChange={setDataset}
       />
 
-      <div className="p-6 space-y-6">
+      <div className="p-2 sm:p-3 md:p-6 space-y-2 sm:space-y-3 md:space-y-6">
         {/* Stats Row */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 md:gap-4 lg:grid-cols-4 scroll-reveal" data-reveal>
           <StatsCard
             label="Iteration"
             value={state.iteration}
@@ -196,15 +207,19 @@ export default function RegressionPage() {
         </div>
 
         {/* Main Content */}
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:gap-3 md:gap-6 xl:grid-cols-3 scroll-reveal" data-reveal>
           {/* Visualization - Takes 2 columns */}
-          <div className="xl:col-span-2 space-y-6">
-            <RegressionChart points={points} state={state} width={700} height={400} />
-            <LossChart lossHistory={state.lossHistory} width={700} height={200} />
+          <div className="xl:col-span-2 space-y-2 sm:space-y-3 md:space-y-6 w-full overflow-x-hidden">
+            <div className="w-full max-w-full overflow-hidden">
+              <RegressionChart points={points} state={state} width={700} height={300} />
+            </div>
+            <div className="w-full max-w-full overflow-hidden">
+              <LossChart lossHistory={state.lossHistory} width={700} height={200} />
+            </div>
           </div>
 
           {/* Controls & Explanation */}
-          <div className="space-y-6">
+          <div className="space-y-2 sm:space-y-3 md:space-y-6">
             <ControlPanel
               isPlaying={isPlaying}
               onPlay={play}
@@ -244,29 +259,29 @@ export default function RegressionPage() {
         </div>
 
         {/* Algorithm Explanation */}
-        <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="mb-4 text-lg font-semibold text-foreground">
+        <div className="rounded-xl border border-border bg-card p-3 sm:p-4 md:p-5">
+          <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-foreground">
             How Linear Regression Works
           </h3>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:gap-4 md:gap-6 md:grid-cols-3">
             <div>
-              <h4 className="mb-2 font-medium text-chart-1">1. Initialize</h4>
-              <p className="text-sm text-muted-foreground">
+              <h4 className="mb-1 sm:mb-2 text-xs sm:text-sm font-medium text-chart-1">1. Initialize</h4>
+              <p className="text-[11px] sm:text-xs text-muted-foreground">
                 Start with random values for slope (m) and intercept (b) in the
                 equation y = mx + b.
               </p>
             </div>
             <div>
-              <h4 className="mb-2 font-medium text-chart-2">2. Calculate Loss</h4>
-              <p className="text-sm text-muted-foreground">
+              <h4 className="mb-1 sm:mb-2 text-xs sm:text-sm font-medium text-chart-2">2. Calculate Loss</h4>
+              <p className="text-[11px] sm:text-xs text-muted-foreground">
                 Measure how wrong our predictions are using Mean Squared Error
                 (MSE): the average of squared differences between predicted and
                 actual values.
               </p>
             </div>
             <div>
-              <h4 className="mb-2 font-medium text-chart-3">3. Update Parameters</h4>
-              <p className="text-sm text-muted-foreground">
+              <h4 className="mb-1 sm:mb-2 text-xs sm:text-sm font-medium text-chart-3">3. Update Parameters</h4>
+              <p className="text-[11px] sm:text-xs text-muted-foreground">
                 Use gradient descent to adjust slope and intercept in the
                 direction that reduces the loss. The learning rate controls step
                 size.

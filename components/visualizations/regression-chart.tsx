@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
+import { Line, Html } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
+import { ChartShell, scalePoint, useThemeColors } from "@/components/visualizations/three-utils";
 import type { Point, RegressionState } from "@/lib/ml-algorithms";
 
 interface RegressionChartProps {
@@ -16,186 +19,85 @@ export function RegressionChart({
   width = 600,
   height = 400,
 }: RegressionChartProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationRef = useRef<number | null>(null);
-  const prevStateRef = useRef<RegressionState | null>(null);
+  const colors = useThemeColors();
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  const ranges = useMemo(() => {
+    if (points.length === 0) {
+      return {
+        rangeX: [0, 100] as [number, number],
+        rangeY: [0, 180] as [number, number],
+      };
+    }
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    points.forEach((point) => {
+      minX = Math.min(minX, point.x);
+      maxX = Math.max(maxX, point.x);
+      minY = Math.min(minY, point.y);
+      maxY = Math.max(maxY, point.y);
+    });
+    const lineY1 = state.slope * minX + state.intercept;
+    const lineY2 = state.slope * maxX + state.intercept;
+    minY = Math.min(minY, lineY1, lineY2);
+    maxY = Math.max(maxY, lineY1, lineY2);
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // Set up for high DPI displays
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    ctx.scale(dpr, dpr);
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-
-    const padding = 50;
-    const chartWidth = width - padding * 2;
-    const chartHeight = height - padding * 2;
-
-    // Calculate data bounds
-    const xMin = 0;
-    const xMax = 100;
-    const yMin = 0;
-    const yMax = 180;
-
-    const scaleX = (x: number) => padding + ((x - xMin) / (xMax - xMin)) * chartWidth;
-    const scaleY = (y: number) => height - padding - ((y - yMin) / (yMax - yMin)) * chartHeight;
-
-    // Animation for smooth transitions
-    const animate = () => {
-      ctx.clearRect(0, 0, width, height);
-
-      // Draw background grid
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
-      ctx.lineWidth = 1;
-
-      // Vertical grid lines
-      for (let x = 0; x <= 100; x += 20) {
-        ctx.beginPath();
-        ctx.moveTo(scaleX(x), padding);
-        ctx.lineTo(scaleX(x), height - padding);
-        ctx.stroke();
-      }
-
-      // Horizontal grid lines
-      for (let y = 0; y <= 180; y += 30) {
-        ctx.beginPath();
-        ctx.moveTo(padding, scaleY(y));
-        ctx.lineTo(width - padding, scaleY(y));
-        ctx.stroke();
-      }
-
-      // Draw axes
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
-      ctx.lineWidth = 2;
-
-      // X-axis
-      ctx.beginPath();
-      ctx.moveTo(padding, height - padding);
-      ctx.lineTo(width - padding, height - padding);
-      ctx.stroke();
-
-      // Y-axis
-      ctx.beginPath();
-      ctx.moveTo(padding, padding);
-      ctx.lineTo(padding, height - padding);
-      ctx.stroke();
-
-      // Axis labels
-      ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-      ctx.font = "12px system-ui, sans-serif";
-      ctx.textAlign = "center";
-
-      // X-axis labels
-      for (let x = 0; x <= 100; x += 20) {
-        ctx.fillText(x.toString(), scaleX(x), height - padding + 20);
-      }
-
-      // Y-axis labels
-      ctx.textAlign = "right";
-      for (let y = 0; y <= 180; y += 30) {
-        ctx.fillText(y.toString(), padding - 10, scaleY(y) + 4);
-      }
-
-      // Draw data points
-      points.forEach((point) => {
-        const x = scaleX(point.x);
-        const y = scaleY(point.y);
-
-        // Point glow
-        const gradient = ctx.createRadialGradient(x, y, 0, x, y, 12);
-        gradient.addColorStop(0, "rgba(139, 92, 246, 0.3)");
-        gradient.addColorStop(1, "rgba(139, 92, 246, 0)");
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(x, y, 12, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Point
-        ctx.fillStyle = "rgba(139, 92, 246, 0.9)";
-        ctx.beginPath();
-        ctx.arc(x, y, 5, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Point border
-        ctx.strokeStyle = "rgba(139, 92, 246, 1)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(x, y, 5, 0, Math.PI * 2);
-        ctx.stroke();
-      });
-
-      // Draw regression line
-      if (state.iteration > 0) {
-        const x1 = xMin;
-        const y1 = state.slope * x1 + state.intercept;
-        const x2 = xMax;
-        const y2 = state.slope * x2 + state.intercept;
-
-        // Line glow
-        ctx.strokeStyle = "rgba(20, 184, 166, 0.3)";
-        ctx.lineWidth = 8;
-        ctx.beginPath();
-        ctx.moveTo(scaleX(x1), scaleY(y1));
-        ctx.lineTo(scaleX(x2), scaleY(y2));
-        ctx.stroke();
-
-        // Main line
-        ctx.strokeStyle = "rgba(20, 184, 166, 1)";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(scaleX(x1), scaleY(y1));
-        ctx.lineTo(scaleX(x2), scaleY(y2));
-        ctx.stroke();
-
-        // Draw residuals
-        ctx.strokeStyle = "rgba(255, 100, 100, 0.3)";
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 4]);
-
-        points.forEach((point) => {
-          const predicted = state.slope * point.x + state.intercept;
-          ctx.beginPath();
-          ctx.moveTo(scaleX(point.x), scaleY(point.y));
-          ctx.lineTo(scaleX(point.x), scaleY(predicted));
-          ctx.stroke();
-        });
-
-        ctx.setLineDash([]);
-      }
-
-      // Draw equation
-      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-      ctx.font = "bold 14px monospace";
-      ctx.textAlign = "left";
-      const equation = `y = ${state.slope.toFixed(3)}x + ${state.intercept.toFixed(3)}`;
-      ctx.fillText(equation, padding + 10, padding + 20);
+    const padX = Math.max(8, (maxX - minX) * 0.08);
+    const padY = Math.max(12, (maxY - minY) * 0.1);
+    return {
+      rangeX: [minX - padX, maxX + padX] as [number, number],
+      rangeY: [minY - padY, maxY + padY] as [number, number],
     };
+  }, [points, state.intercept, state.slope]);
 
-    animate();
+  const pointVectors = useMemo(
+    () => points.map((point) => scalePoint(point.x, point.y, ranges.rangeX, ranges.rangeY, 50)),
+    [points, ranges]
+  );
 
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [points, state, width, height]);
+  const regressionLine = useMemo(() => {
+    const xMin = ranges.rangeX[0];
+    const xMax = ranges.rangeX[1];
+    const y1 = state.slope * xMin + state.intercept;
+    const y2 = state.slope * xMax + state.intercept;
+    return [
+      scalePoint(xMin, y1, ranges.rangeX, ranges.rangeY, 50),
+      scalePoint(xMax, y2, ranges.rangeX, ranges.rangeY, 50),
+    ];
+  }, [ranges, state]);
+
+  const residualLines = useMemo(() => {
+    if (state.iteration === 0) return [] as Array<[[number, number, number], [number, number, number]]>;
+    return points.map((point) => {
+      const predicted = state.slope * point.x + state.intercept;
+      return [
+        scalePoint(point.x, point.y, ranges.rangeX, ranges.rangeY, 50),
+        scalePoint(point.x, predicted, ranges.rangeX, ranges.rangeY, 50),
+      ];
+    });
+  }, [points, ranges, state]);
+
+  const chart1 = `rgb(${colors.chart1.replace(/ /g, ', ')})`;
+  const chart2 = `rgb(${colors.chart2.replace(/ /g, ', ')})`;
+  const chart4 = `rgb(${colors.chart4.replace(/ /g, ', ')})`;
 
   return (
-    <div className="relative rounded-xl border border-border bg-card p-4 overflow-hidden">
-      <canvas
-        ref={canvasRef}
-        className="w-full"
-        style={{ maxWidth: width, maxHeight: height }}
-      />
-      <div className="absolute bottom-6 left-6 flex items-center gap-4 text-xs text-muted-foreground">
+    <div className="space-y-3">
+      <ChartShell height={height} axisSize={48} showAxes={true} showAxisLabels={true} axisLabels={{ x: "X", y: "Y" }}>
+        <RegressionContent
+          points={points}
+          pointVectors={pointVectors}
+          regressionLine={regressionLine}
+          residualLines={residualLines}
+          iteration={state.iteration}
+          chart1={chart1}
+          chart2={chart2}
+          chart4={chart4}
+        />
+      </ChartShell>
+
+      <div className="flex flex-wrap items-center gap-4 rounded-full border border-white/10 bg-black/60 px-3 py-1 text-xs text-white/80 shadow-lg backdrop-blur">
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full bg-chart-1" />
           <span>Data Points</span>
@@ -205,10 +107,106 @@ export function RegressionChart({
           <span>Best Fit Line</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="h-0.5 w-6 border-t border-dashed border-red-400" />
+          <div className="h-0.5 w-6 border-t border-dashed border-chart-4" />
           <span>Residuals</span>
         </div>
       </div>
     </div>
+  );
+}
+
+interface RegressionContentProps {
+  points: Point[];
+  pointVectors: [number, number, number][];
+  regressionLine: [number, number, number][];
+  residualLines: Array<[[number, number, number], [number, number, number]]>;
+  iteration: number;
+  chart1: string;
+  chart2: string;
+  chart4: string;
+}
+
+function RegressionContent({
+  points,
+  pointVectors,
+  regressionLine,
+  residualLines,
+  iteration,
+  chart1,
+  chart2,
+  chart4,
+}: RegressionContentProps) {
+  const meshRefs = useRef<any[]>([]);
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [selected, setSelected] = useState<number | null>(null);
+
+  const phases = useMemo(
+    () => pointVectors.map(() => Math.random() * Math.PI * 2),
+    [pointVectors]
+  );
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    meshRefs.current.forEach((mesh, idx) => {
+      if (!mesh) return;
+      const base = pointVectors[idx];
+      const lift = Math.sin(t * 1.15 + phases[idx]) * 0.5;
+      mesh.position.set(base[0], base[1] + lift, base[2]);
+    });
+  });
+
+  return (
+    <>
+      <group>
+        {pointVectors.map((position, idx) => {
+          const isSelected = selected === idx;
+          const isDimmed = selected !== null && !isSelected;
+          const opacity = isDimmed ? 0.2 : 1.0;
+          return (
+            <mesh
+              position={position}
+              key={`reg-point-${idx}`}
+              castShadow
+              ref={(el) => (meshRefs.current[idx] = el)}
+              onPointerOver={() => setHovered(idx)}
+              onPointerOut={() => setHovered((prev) => (prev === idx ? null : prev))}
+              onClick={() => setSelected((prev) => (prev === idx ? null : idx))}
+            >
+              <sphereGeometry args={[1.6, 8, 8]} />
+              <meshStandardMaterial
+                color={chart1}
+                emissive={chart1}
+                emissiveIntensity={isSelected ? 0.6 : 0.3}
+                roughness={0.4}
+                metalness={0.15}
+                transparent
+                opacity={opacity}
+              />
+            </mesh>
+          );
+        })}
+
+        {iteration > 0 && <Line points={regressionLine} color={chart2} lineWidth={3.5} />}
+
+        {iteration > 0 &&
+          residualLines.map((line, idx) => (
+            <Line
+              key={`reg-residual-${idx}`}
+              points={line}
+              color={chart4}
+              transparent
+              opacity={0.55}
+              lineWidth={1.5}
+            />
+          ))}
+      </group>
+      {hovered !== null && (
+        <Html position={[pointVectors[hovered][0], pointVectors[hovered][1] + 6, 0]} center style={{ pointerEvents: 'none' }} wrapperClass="overflow-hidden">
+          <div className="rounded-md border border-white/10 bg-black/70 px-2 py-1 text-[11px] text-white/90 shadow-xl transition-opacity duration-700">
+            x: {points[hovered]?.x.toFixed(1)} | y: {points[hovered]?.y.toFixed(1)}
+          </div>
+        </Html>
+      )}
+    </>
   );
 }

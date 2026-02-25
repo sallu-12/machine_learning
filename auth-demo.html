@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevNotch Authentication Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 900px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 28px;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            color: #666;
+            font-size: 16px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .tab:hover {
+            color: #667eea;
+        }
+        
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.3s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .message {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        
+        .error {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+        }
+        
+        .success {
+            background: #efe;
+            color: #3c3;
+            border: 1px solid #cfc;
+        }
+        
+        .info {
+            background: #e3f2fd;
+            color: #1976d2;
+            border: 1px solid #bbdefb;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 30px;
+        }
+        
+        .info h3 {
+            margin-bottom: 10px;
+            color: #1565c0;
+        }
+        
+        .info code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #d32f2f;
+        }
+        
+        .users-list {
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 20px;
+        }
+        
+        .users-list h3 {
+            margin-bottom: 12px;
+            color: #333;
+        }
+        
+        .user-item {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .user-item strong {
+            color: #667eea;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .button-group button {
+            flex: 1;
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 DevNotch Authentication Demo</h1>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('signup')">Sign Up</button>
+            <button class="tab" onclick="switchTab('login')">Login</button>
+            <button class="tab" onclick="switchTab('users')">View Users</button>
+        </div>
+        
+        <!-- Sign Up Tab -->
+        <div id="signup" class="tab-content active">
+            <div id="signupMessage"></div>
+            <form onsubmit="handleSignup(event)">
+                <div class="form-group">
+                    <label for="signupName">Full Name</label>
+                    <input type="text" id="signupName" placeholder="Enter your name" required>
+                </div>
+                <div class="form-group">
+                    <label for="signupEmail">Email</label>
+                    <input type="email" id="signupEmail" placeholder="your.email@example.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="signupPassword">Password</label>
+                    <input type="password" id="signupPassword" placeholder="Create a strong password" required>
+                </div>
+                <button type="submit">Create Account</button>
+            </form>
+            
+            <div class="info">
+                <h3>How Sign Up Works:</h3>
+                <p>1. Enter your name, email, and password</p>
+                <p>2. System checks if email already exists</p>
+                <p>3. If new, saves to <code>localStorage</code> as <code>devnotch_users</code></p>
+                <p>4. Automatically creates authentication token</p>
+                <p>5. Stores user profile for quick access</p>
+            </div>
+        </div>
+        
+        <!-- Login Tab -->
+        <div id="login" class="tab-content">
+            <div id="loginMessage"></div>
+            <form onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="loginEmail">Email</label>
+                    <input type="email" id="loginEmail" placeholder="your.email@example.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" placeholder="Enter your password" required>
+                </div>
+                <button type="submit">Sign In</button>
+            </form>
+            
+            <div class="info">
+                <h3>How Login Works:</h3>
+                <p>1. Enter registered email and password</p>
+                <p>2. System searches <code>localStorage</code> for matching user</p>
+                <p>3. Validates email and password match</p>
+                <p>4. Creates authentication token and saves to cookie</p>
+                <p>5. Saves user profile to <code>localStorage</code></p>
+                <p>6. Redirects to dashboard (in real app)</p>
+            </div>
+        </div>
+        
+        <!-- Users List Tab -->
+        <div id="users" class="tab-content">
+            <div class="users-list">
+                <h3>Registered Users (localStorage)</h3>
+                <div id="usersList"></div>
+            </div>
+            
+            <div class="button-group">
+                <button onclick="refreshUsers()" class="btn-secondary">Refresh Users</button>
+                <button onclick="clearAllUsers()" class="btn-danger">Clear All Users</button>
+            </div>
+            
+            <div class="info">
+                <h3>LocalStorage Structure:</h3>
+                <p><strong>Key:</strong> <code>devnotch_users</code></p>
+                <p><strong>Value:</strong> Array of user objects with name, email, password, createdAt</p>
+                <p><strong>Location:</strong> Browser localStorage (persists even after closing browser)</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Auth Functions (Same as auth-client.ts)
+        const USERS_KEY = 'devnotch_users';
+        const PROFILE_KEY = 'auth_profile';
+        const TOKEN_KEY = 'auth_token';
+
+        // Get all users from localStorage
+        function getAllUsers() {
+            try {
+                const raw = localStorage.getItem(USERS_KEY);
+                return raw ? JSON.parse(raw) : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        // Save users to localStorage
+        function saveAllUsers(users) {
+            try {
+                localStorage.setItem(USERS_KEY, JSON.stringify(users));
+            } catch (e) {
+                console.error('Failed to save users');
+            }
+        }
+
+        // Check if email exists
+        function isEmailRegistered(email) {
+            const users = getAllUsers();
+            return users.some(u => u.email.toLowerCase() === email.toLowerCase());
+        }
+
+        // Create new account
+        function createAccount(name, email, password) {
+            // Validation
+            if (!name || name.trim().length < 2) {
+                return { success: false, message: 'Name must be at least 2 characters' };
+            }
+            if (!email || !email.includes('@')) {
+                return { success: false, message: 'Please enter a valid email' };
+            }
+            if (!password || password.length < 6) {
+                return { success: false, message: 'Password must be at least 6 characters' };
+            }
+
+            // Check duplicate
+            if (isEmailRegistered(email)) {
+                return { success: false, message: 'Email already registered. Please login.' };
+            }
+
+            // Create user
+            const newUser = {
+                name: name.trim(),
+                email: email.toLowerCase().trim(),
+                password: password,
+                createdAt: new Date().toISOString()
+            };
+
+            const users = getAllUsers();
+            users.push(newUser);
+            saveAllUsers(users);
+
+            return { success: true, message: 'Account created successfully! Please sign in.' };
+        }
+
+        // Sign in
+        function signIn(email, password) {
+            if (!email || !password) {
+                return { success: false, message: 'Please enter email and password' };
+            }
+
+            const users = getAllUsers();
+            
+            // Check if email exists
+            const userWithEmail = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+            
+            if (!userWithEmail) {
+                // Email not registered
+                return { success: false, message: 'No account found. Please create an account first.' };
+            }
+            
+            // Email exists, check password
+            if (userWithEmail.password !== password) {
+                return { success: false, message: 'Invalid password. Please try again.' };
+            }
+
+            // Success - Create token and save profile
+            const token = `token_${Date.now()}_${Math.random().toString(36).substr(2)}`;
+            document.cookie = `${TOKEN_KEY}=${token}; path=/; max-age=${60*60*24*7}`;
+            localStorage.setItem(PROFILE_KEY, JSON.stringify({ name: userWithEmail.name, email: userWithEmail.email }));
+
+            return { success: true, message: 'Signed in successfully!' };
+        }
+
+        // UI Functions
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+
+            // Refresh users if switching to users tab
+            if (tabName === 'users') {
+                refreshUsers();
+            }
+        }
+
+        function showMessage(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="message ${type}">${message}</div>`;
+            setTimeout(() => {
+                element.innerHTML = '';
+            }, 5000);
+        }
+
+        function handleSignup(event) {
+            event.preventDefault();
+            const name = document.getElementById('signupName').value;
+            const email = document.getElementById('signupEmail').value;
+            const password = document.getElementById('signupPassword').value;
+
+            const result = createAccount(name, email, password);
+
+            if (result.success) {
+                showMessage('signupMessage', result.message, 'success');
+                event.target.reset();
+                // Switch to login tab to sign in
+                setTimeout(() => {
+                    document.querySelector('.tab:nth-child(2)').click();
+                }, 1500);
+            } else {
+                showMessage('signupMessage', result.message, 'error');
+            }
+        }
+
+        function handleLogin(event) {
+            event.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            const result = signIn(email, password);
+
+            if (result.success) {
+                showMessage('loginMessage', result.message + ' (In real app, would redirect to dashboard)', 'success');
+                event.target.reset();
+            } else {
+                showMessage('loginMessage', result.message, 'error');
+            }
+        }
+
+        function refreshUsers() {
+            const users = getAllUsers();
+            const listElement = document.getElementById('usersList');
+
+            if (users.length === 0) {
+                listElement.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">No users registered yet. Create an account to see it here!</p>';
+                return;
+            }
+
+            listElement.innerHTML = users.map((user, index) => `
+                <div class="user-item">
+                    <strong>User ${index + 1}:</strong> ${user.name}<br>
+                    <strong>Email:</strong> ${user.email}<br>
+                    <strong>Password:</strong> ${user.password}<br>
+                    <strong>Created:</strong> ${new Date(user.createdAt).toLocaleString()}
+                </div>
+            `).join('');
+        }
+
+        function clearAllUsers() {
+            if (confirm('Are you sure you want to clear all users? This cannot be undone!')) {
+                localStorage.removeItem(USERS_KEY);
+                localStorage.removeItem(PROFILE_KEY);
+                document.cookie = `${TOKEN_KEY}=; path=/; max-age=0`;
+                refreshUsers();
+                alert('All users cleared!');
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshUsers();
+        });
+    </script>
+</body>
+</html>
