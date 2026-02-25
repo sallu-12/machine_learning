@@ -172,6 +172,16 @@ export default function DatasetsPage() {
     setIsLoading(false);
   };
 
+  const handleRegenerateAll = () => {
+    // Clear current selection and regenerate
+    setPreviewData([]);
+    
+    // If a dataset is currently selected, regenerate its data
+    if (selectedDataset) {
+      handleDatasetSelect(selectedDataset);
+    }
+  };
+
   const formatTime = (date: Date) => {
     const diff = Date.now() - date.getTime();
     const hours = Math.floor(diff / 3600000);
@@ -243,7 +253,13 @@ export default function DatasetsPage() {
             <h3 className="text-base sm:text-lg font-semibold text-foreground">
               Available Datasets
             </h3>
-            <Button variant="outline" size="sm" className="gap-2 bg-transparent">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2 bg-transparent"
+              onClick={handleRegenerateAll}
+              disabled={!selectedDataset}
+            >
               <RefreshCw className="h-4 w-4" />
               Regenerate All
             </Button>
@@ -320,17 +336,11 @@ export default function DatasetsPage() {
         {/* Data Preview */}
         {selectedDataset && (
           <section className="rounded-xl border border-border bg-card p-3 sm:p-4 md:p-5 scroll-reveal" data-reveal>
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Eye className="h-5 w-5 text-primary" />
-                <h3 className="text-lg font-semibold text-foreground">
-                  Data Preview
-                </h3>
-              </div>
-              <Button variant="outline" size="sm" className="gap-2 bg-transparent">
-                <Download className="h-4 w-4" />
-                Export JSON
-              </Button>
+            <div className="mb-4 flex items-center gap-3">
+              <Eye className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold text-foreground">
+                Data Preview
+              </h3>
             </div>
 
             {isLoading ? (
